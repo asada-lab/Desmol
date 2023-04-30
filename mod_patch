@@ -1,0 +1,310 @@
+--- ./add_node_type.py	2019-01-25 14:13:44.000000000 +0900
++++ ./add_node_type.py	2023-04-27 15:35:48.000000000 +0900
+@@ -3,7 +3,7 @@
+ import random
+ import numpy as np
+ from copy import deepcopy
+-from types import IntType, ListType, TupleType, StringTypes
++
+ import itertools
+ import time
+ import math
+@@ -23,7 +23,7 @@
+ import gzip
+ import networkx as nx
+ from rdkit.Chem import rdmolops
+-
++from prediction_onlyTOF_structure import make_rf
+ 
+ 
+ def expanded_node(model,state,val):
+@@ -42,11 +42,10 @@
+         get_int_old.append(val.index(position[j]))
+ 
+     get_int=get_int_old
+-
++    
+     x=np.reshape(get_int,(1,len(get_int)))
+     x_pad= sequence.pad_sequences(x, maxlen=82, dtype='int32',
+         padding='post', truncating='pre', value=0.)
+-
+     for i in range(30):
+         predictions=model.predict(x_pad)
+         #print "shape of RNN",predictions.shape
+@@ -57,10 +56,9 @@
+         next_int=np.argmax(next_probas)
+         #get_int.append(next_int)
+         all_nodes.append(next_int)
+-
++    
+     all_nodes=list(set(all_nodes))
+-
+-    print all_nodes
++    #print('all_nodes:', all_nodes)
+ 
+ 
+ 
+@@ -82,7 +80,7 @@
+     for i in range(len(all_nodes)):
+         added_nodes.append(val[all_nodes[i]])
+ 
+-    print added_nodes
++    #print('added_nodes:', added_nodes)
+ 
+     return added_nodes
+ 
+@@ -141,7 +139,7 @@
+ 
+ def predict_smile(all_posible,val):
+ 
+-
++    #print('170 len_all_posible', len(all_posible))
+     new_compound=[]
+     for i in range(len(all_posible)):
+         total_generated=all_posible[i]
+@@ -169,6 +167,23 @@
+ 
+     return new_compound
+ 
++
++### gaussの式  使ってません
++
++import math
++def gauss(x, average, sigma, multiplication):
++
++    
++
++    y = (math.exp(-((x-average)**2)/(2*sigma**2)))/(math.sqrt(2*math.pi*sigma**2))
++    return multiplication*y
++
++
++
++
++
++
++
+ def check_node_type(new_compound,SA_mean,SA_std,logP_mean,logP_std,cycle_mean,cycle_std):
+     node_index=[]
+     valid_compound=[]
+@@ -183,17 +198,24 @@
+     #print "cycle_std:",cycle_std
+     activity=[]
+     score=[]
+-
++    #flTPSAPS=[]
++    naiso=[]
++    SA_list=[]
++    cycle_list=[]
++    mobility_list=[]
++    
++    
+     for i in range(len(new_compound)):
+         try:
+             m = Chem.MolFromSmiles(str(new_compound[i]))
+         except:
+-            print None
++            print(None)
++            score=-1
+         if m!=None and len(new_compound[i])<=81:
+-            try:
+-                logp=Descriptors.MolLogP(m)
+-            except:
+-                logp=-1000
++            #try:
++                #logp=Descriptors.MolLogP(m)
++            #except:
++                #logp=-1000
+             node_index.append(i)
+             valid_compound.append(new_compound[i])
+             SA_score = -sascorer.calculateScore(MolFromSmiles(new_compound[i]))
+@@ -211,30 +233,49 @@
+                 #print SA_score
+                 #print logp
+             SA_score_norm=(SA_score-SA_mean)/SA_std
+-            logp_norm=(logp-logP_mean)/logP_std
++            #SA_list.extend('1')
++            
++            
++            
++            ### MolLogP ###
++            TP=[]
++            mobility=0
++            
++            try:
++                mobility = make_rf(new_compound[i])
++                print(new_compound[i], end=' ')
++                print(' mobility = ', mobility)
++            except:
++                mobility_score = -1
++                print(None)
++                
++            if mobility !=None:
++                mobility_score =mobility
++                
++            
++            TP.append(mobility_score)
++            
++
++            
++            #print(mobility_score)
++            
+             cycle_score_norm=(cycle_score-cycle_mean)/cycle_std
+-            score_one = SA_score_norm+ logp_norm + cycle_score_norm
++            score_one = SA_score_norm + mobility_score*10**5 + cycle_score_norm
++            #print('262 SA_score_norm ',SA_score_norm)
++            #print('263 ',score_one)
++            #print('264' ,cycle_score_norm)
++            mobility=float(mobility)
++            # score.append(mobility)
+             score.append(score_one)
+-
++            mobility_list.extend(TP)
++          
++            #cycle_list.extend(cycle_score_norm)
++            #TPSA_list.extend(TPSA_score)
++            #NumHA_list.extend(NumHA_score)    
++            #print('SA_score_norm = ', SA_score_norm)
++            #print('cycle_score_norm = ', cycle_score_norm)
++            print('score_one = ', score_one)
++            #new_score=int(score)
+         all_smile.append(new_compound[i])
+ 
+-    return node_index,score,valid_compound,all_smile
+-
+-def logp_calculation(new_compound):
+-    print new_compound[0]
+-    logp_value=[]
+-    valid_smile=[]
+-    all_smile=[]
+-    distance=[]
+-    m = Chem.MolFromSmiles(str(new_compound[0]))
+-    try:
+-        if m is not None:
+-            logp=Descriptors.MolLogP(m)
+-            valid_smile.append(new_compound)
+-        else:
+-            logp=-100
+-    except:
+-        logp=-100
+-    all_smile.append(str(new_compound[0]))
+-
+-    return logp,valid_smile,all_smile
++    return node_index,score,valid_compound,all_smile,mobility_list
+--- ./load_model.py	2019-01-25 14:13:44.000000000 +0900
++++ ./load_model.py	2023-04-30 07:44:30.020465271 +0900
+@@ -40,7 +40,7 @@
+ 
+ def loaded_model():
+ 
+-    json_file = open('../RNN-model/model.json', 'r')
++    json_file = open('./RNN-model/model.json', 'r')
+     #json_file = open('/Users/yang/LSTM-chemical-project/protein-ligand/model.json', 'r')
+     loaded_model_json = json_file.read()
+     json_file.close()
+@@ -48,7 +48,7 @@
+ 
+     # load weights into new model
+     #loaded_model.load_weights('/Users/yang/LSTM-chemical-project/protein-ligand/model.h5')
+-    loaded_model.load_weights('../RNN-model/model.h5')
++    loaded_model.load_weights('./RNN-model/model.h5')
+     print("Loaded model from disk")
+     
+ 
+--- ./make_smile.py	2019-01-25 14:13:44.000000000 +0900
++++ ./make_smile.py	2023-04-30 09:33:00.406288728 +0900
+@@ -3,16 +3,59 @@
+ import itertools
+ import operator
+ import numpy as np
+-#import nltk
+-#import os
++import nltk
++import os
+ from rdkit import Chem
+ from rdkit.Chem import Draw
+ from IPython import display
+ #import matplotlib.pyplot as plt
+ from rdkit.Chem import Descriptors
+-#import os
+ 
+ 
++def zinc_data_with_bracket():
++
++    sen_space=[]
++    #f = open('/Users/yang/smiles.csv', 'rb')
++    #f = open('/Users/yang/LSTM-chemical-project/smile_trainning.csv', 'rb')
++    f = open('/home/yang/LSTM-chemical-project/data/250k_rndm_zinc_drugs_clean.smi', 'rb')
++
++    reader = csv.reader(f)
++    for row in reader:
++        #word_space[row].append(reader[row])
++        #print word_sapce
++        sen_space.append(row)
++    #print sen_space
++    f.close()
++
++    word1=sen_space[0]
++    word_space=list(word1[0])
++    end="\n"
++
++    zinc_processed=[]
++    organic_smile=[]
++    t=0
++    for i in range(len(sen_space)):
++        word1=sen_space[i]
++        m = Chem.MolFromSmiles(word1[0])
++        Chem.Kekulize(m)
++        s=Chem.MolToSmiles(m,kekuleSmiles=True)
++        zinc_processed.append(s)
++        #word_space=list(word1[0])
++    #print len(zinc_processed)
++
++    while t <len(zinc_processed):
++        #print t
++        word2=zinc_processed[t]
++        word_space=list(word2)
++        word=[]
++
++        organic_smile.append(word_space)
++        t=t+1
++
++    #print len(organic_smile)
++    #print organic_smile
++    return organic_smile
++
+ def zinc_processed_with_bracket(sen_space):
+     #print sen_space
+     all_smile=[]
+@@ -102,14 +145,17 @@
+ 
+     ma=6.66134
+ 
+-    print max(logp_value)
+-    print logp_value
++    print(max(logp_value))
++    print(logp_value)
+ 
+ 
+ def zinc_data_with_bracket_original():
+ 
+     sen_space=[]
+-    f = open('../data/250k_rndm_zinc_drugs_clean.smi','rb')
++    #f = open('/Users/yang/smiles.csv', 'rb')
++    #f = open('/Users/yang/LSTM-chemical-project/smile_trainning.csv', 'rb')
++    f = open('./data/250k_rndm_zinc_drugs_clean.smi', 'r')
++
+     reader = csv.reader(f)
+     for row in reader:
+         #word_space[row].append(reader[row])
+@@ -152,3 +198,11 @@
+ 
+ 
+ 
++
++
++#hi=organic()
++#organic_logp(hi)
++
++#hi=zinc_data_with_bracket_original()
++#zinc_logp(hi)
++#zinc_processed_with_bracket(hi)
