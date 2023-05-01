@@ -1,0 +1,14 @@
+1. ChemTS packages provided py Tsuda lab.
+   http://github.com/tsudalab/ChemTS
+
+ChemTS requires keras version 2.0.5.
+
+Our systems
+1. Ubuntu 18.04 LTS
+2. keras==2.0.5
+3a. tensorflow-gpu 1.15.2 (for GPU)
+3b. tensorflow 1.15.2 (for CPU)
+4. cuda 10.0
+5. cuDNN 7.4
+6. python 3.6
+

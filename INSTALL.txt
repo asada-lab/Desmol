@@ -1,7 +1,7 @@
 1. Download ChemTS from github.
    http://github.com/tsudalab/ChemTS
-2. Extract ChemTS-master folder.
-3. Edit variables ChemTS_folder, TARGET_folder in set.sh to point the correct directory. You can set arbitrary name for working folder to TARGET_folder.
+2. Extract ChemTS-master folder in Desmol folder.
+3. Edit variables 'ChemTS_folder', 'TARGET_folder' in set.sh to point the correct directory.
 TARGET_folder should be placed in this folder such as gen10000.
 4. Run set.sh
    $ set.sh
